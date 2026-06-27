@@ -1,0 +1,32 @@
+name: Sync Configs
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 7 * * *'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone ponytail
+        run: |
+          git clone --depth 1 https://github.com/DietrichGebert/ponytail.git ponytail-src
+
+      - name: Sync configs
+        run: |
+          FOLDERS=(.agents .claude-plugin .clinerules .codex-plugin .cursor .devin-plugin .kiro .openclaw .opencode .windsurf)
+          mkdir -p local-configs
+          for folder in "${FOLDERS[@]}"; do
+            if [ -d "ponytail-src/$folder" ]; then
+              cp -r "ponytail-src/$folder" "local-configs/"
+              echo "✓ $folder"
+            fi
+          done
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: synced-configs
+          path: local-configs/
