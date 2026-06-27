@@ -15,21 +15,12 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup environment
-        run: |
-          mkdir -p local-configs/backup
-          echo "TIMESTAMP=$(date +%Y%m%d_%H%M%S)" >> $GITHUB_ENV
-
       - name: Clone ponytail source
         run: |
           git clone https://github.com/DietrichGebert/ponytail.git ponytail-src
 
       - name: Sync configs
         run: |
-          set -e
-          
-          echo "🔄 Synchronisation des configs..."
-          
           FOLDERS=(
             ".agents"
             ".claude-plugin"
@@ -46,24 +37,16 @@ jobs:
           
           for folder in "${FOLDERS[@]}"; do
             if [ -d "ponytail-src/$folder" ]; then
-              echo "  ✓ $folder"
+              echo "✓ $folder"
               mkdir -p "local-configs/$folder"
-              cp -r "ponytail-src/$folder"/* "local-configs/$folder/" 2>/dev/null || true
+              cp -r "ponytail-src/$folder/." "local-configs/$folder/"
             fi
           done
-          
-          echo "✅ Sync complétée"
 
       - name: Commit & Push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
-          if [ -n "$(git status --porcelain)" ]; then
-            git add local-configs/
-            git commit -m "ci: sync configs - ${{ env.TIMESTAMP }}"
-            git push
-            echo "📤 Push complété"
-          else
-            echo "ℹ️  Pas de changements"
-          fi
+          git add -A
+          git diff --staged --quiet || git commit -m "sync: ponytail configs"
+          git push
