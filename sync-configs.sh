@@ -1,76 +1,69 @@
-#!/bin/bash
-# Ponytail Config Sync v1.0
-# Synchronise les configs depuis le repo ponytail
+name: Sync Configs
 
-set -e
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * 1'
 
-REPO_URL="https://github.com/DietrichGebert/ponytail.git"
-REPO_PATH="./ponytail-src"
-TARGET_DIR="./local-configs"
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
-echo "🚀 Démarrage sync ponytail..."
-echo ""
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-# Clone ou update
-if [ -d "$REPO_PATH/.git" ]; then
-  echo "♻️  Update du repo ponytail..."
-  cd "$REPO_PATH"
-  git pull origin main
-  cd ..
-else
-  echo "📥 Clone du repo ponytail..."
-  git clone "$REPO_URL" "$REPO_PATH"
-fi
+      - name: Setup environment
+        run: |
+          mkdir -p local-configs/backup
+          echo "TIMESTAMP=$(date +%Y%m%d_%H%M%S)" >> $GITHUB_ENV
 
-# Créer répertoires
-mkdir -p "$TARGET_DIR/backup"
-echo "📁 Target: $TARGET_DIR"
-echo ""
+      - name: Clone ponytail source
+        run: |
+          git clone https://github.com/DietrichGebert/ponytail.git ponytail-src
 
-# Backup existant
-if [ "$(ls -A $TARGET_DIR 2>/dev/null)" ]; then
-  echo "💾 Backup configs existantes..."
-  tar -czf "$TARGET_DIR/backup/config-backup-$TIMESTAMP.tar.gz" \
-    $(ls -d $TARGET_DIR/.* 2>/dev/null | grep -v "^\.$\|^\.\.$\|backup") \
-    2>/dev/null || true
-  echo "✓ Backup créé"
-  echo ""
-fi
+      - name: Sync configs
+        run: |
+          set -e
+          
+          echo "🔄 Synchronisation des configs..."
+          
+          FOLDERS=(
+            ".agents"
+            ".claude-plugin"
+            ".clinerules"
+            ".codex-plugin"
+            ".cursor"
+            ".devin-plugin"
+            ".github"
+            ".kiro"
+            ".openclaw"
+            ".opencode"
+            ".windsurf"
+          )
+          
+          for folder in "${FOLDERS[@]}"; do
+            if [ -d "ponytail-src/$folder" ]; then
+              echo "  ✓ $folder"
+              mkdir -p "local-configs/$folder"
+              cp -r "ponytail-src/$folder"/* "local-configs/$folder/" 2>/dev/null || true
+            fi
+          done
+          
+          echo "✅ Sync complétée"
 
-# Dossiers à syncer
-FOLDERS=(
-  ".agents"
-  ".claude-plugin"
-  ".clinerules"
-  ".codex-plugin"
-  ".cursor"
-  ".devin-plugin"
-  ".github"
-  ".kiro"
-  ".openclaw"
-  ".opencode"
-  ".windsurf"
-)
-
-# Sync
-echo "🔄 Synchronisation..."
-SYNCED=0
-for folder in "${FOLDERS[@]}"; do
-  if [ -d "$REPO_PATH/$folder" ]; then
-    echo "  ✓ $folder"
-    mkdir -p "$TARGET_DIR/$folder"
-    cp -r "$REPO_PATH/$folder"/* "$TARGET_DIR/$folder/" 2>/dev/null || true
-    ((SYNCED++))
-  fi
-done
-echo ""
-
-# Résumé
-echo "📊 Résumé:"
-echo "  ✓ $SYNCED dossiers synced"
-echo "  📦 Taille: $(du -sh $TARGET_DIR | cut -f1)"
-echo "  🕐 Date: $TIMESTAMP"
-echo ""
-
-echo "✅ Sync complétée!"
+      - name: Commit & Push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          if [ -n "$(git status --porcelain)" ]; then
+            git add local-configs/
+            git commit -m "ci: sync configs - ${{ env.TIMESTAMP }}"
+            git push
+            echo "📤 Push complété"
+          else
+            echo "ℹ️  Pas de changements"
+          fi
