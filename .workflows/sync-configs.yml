@@ -1,0 +1,46 @@
+name: Sync Configs
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 9 * * 1'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Sync configs from ponytail
+        run: |
+          set -e
+          git clone --depth 1 https://github.com/DietrichGebert/ponytail.git ponytail-src
+
+          FOLDERS=(.agents .claude-plugin .clinerules .codex-plugin .cursor .devin-plugin .kiro .openclaw .opencode .windsurf)
+
+          rm -rf local-configs
+          for folder in "${FOLDERS[@]}"; do
+            if [ -d "ponytail-src/$folder" ]; then
+              mkdir -p "local-configs/$folder"
+              cp -r "ponytail-src/$folder/." "local-configs/$folder/"
+              echo "✓ $folder"
+            else
+              echo "⊘ $folder absent"
+            fi
+          done
+
+          rm -rf ponytail-src
+
+      - name: Commit & Push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --staged --quiet && echo "Rien à committer" && exit 0
+          git commit -m "sync: ponytail configs"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push
